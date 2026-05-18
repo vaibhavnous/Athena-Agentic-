@@ -188,6 +188,11 @@ def list_runs(limit: int = 50) -> List[Dict[str, Any]]:
     conn = get_connection()
     try:
         cursor = conn.cursor()
+        try:
+            cursor.timeout = max(1, int(os.getenv("ATHENA_SQL_QUERY_TIMEOUT_SECONDS", "5")))
+        except Exception:
+            # Some drivers may not expose cursor timeout; ignore.
+            pass
         cursor.execute(
             f"""
             WITH ai_runs AS (
@@ -234,6 +239,31 @@ def list_runs(limit: int = 50) -> List[Dict[str, Any]]:
             for row in rows
             if row[0]
         ]
+    except Exception as exc:
+        # If the combined query is slow (missing indexes / large tables), fall back
+        # to a cheaper query so the UI can still hydrate.
+        try:
+            cursor = conn.cursor()
+            try:
+                cursor.timeout = max(1, int(os.getenv("ATHENA_SQL_QUERY_TIMEOUT_SECONDS", "5")))
+            except Exception:
+                pass
+            cursor.execute(
+                f"""
+                SELECT TOP ({limit}) run_id, MAX(checkpoint_at) AS last_activity
+                FROM [{_pipeline_schema()}].[kpi_checkpoints]
+                GROUP BY run_id
+                ORDER BY MAX(checkpoint_at) DESC
+                """
+            )
+            rows = cursor.fetchall()
+            return [
+                {"run_id": row[0], "last_activity": row[1]}
+                for row in rows
+                if row and row[0]
+            ]
+        except Exception:
+            raise
     finally:
         conn.close()
 

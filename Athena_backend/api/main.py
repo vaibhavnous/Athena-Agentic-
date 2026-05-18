@@ -5,6 +5,7 @@ import os
 import re
 import sys
 import uuid
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -723,7 +724,14 @@ def abort_run(run_id: str) -> Dict[str, Any]:
 @app.get("/runs")
 def runs() -> List[Dict[str, Any]]:
     try:
-        return [_ui_run(row["run_id"]) for row in list_runs()]
+        timeout_seconds = max(1, int(os.getenv("ATHENA_RUNS_ENDPOINT_TIMEOUT_SECONDS", "5")))
+        future = BACKGROUND_EXECUTOR.submit(list_runs)
+        rows = future.result(timeout=timeout_seconds)
+        return [_ui_run(row["run_id"]) for row in rows]
+    except FutureTimeoutError:
+        # Prevent the UI from hanging when the underlying Azure SQL query is slow/unreachable.
+        logger.warning("GET /runs timed out while listing runs; returning empty list")
+        return []
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 

@@ -237,7 +237,7 @@ function OverviewTab({ run, onRunRefresh, addNotification }) {
   }
 
   return (
-    <div className="grid grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
       {/* Left: DAG */}
       <div className="card p-4">
         <h3 className="text-sm font-semibold text-gray-300 mb-3">Pipeline Flow</h3>
@@ -262,9 +262,9 @@ function OverviewTab({ run, onRunRefresh, addNotification }) {
               { label: 'Started', value: run.started_at ? new Date(run.started_at).toLocaleString() : '—' },
               { label: 'Completed', value: run.completed_at ? new Date(run.completed_at).toLocaleString() : 'In progress' }
             ].map(({ label, value }) => (
-              <div key={label} className="flex justify-between items-center py-1.5 border-b border-bg-border last:border-0">
+              <div key={label} className="flex justify-between items-start gap-4 py-1.5 border-b border-bg-border last:border-0">
                 <span className="text-xs text-gray-500">{label}</span>
-                <span className="text-xs text-gray-300 font-mono">{value}</span>
+                <span className="text-xs text-gray-300 font-mono text-right break-all">{value}</span>
               </div>
             ))}
           </div>

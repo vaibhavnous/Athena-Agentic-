@@ -1,8 +1,7 @@
 // @ts-nocheck
-import React, { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import React from 'react'
+import { motion } from 'framer-motion'
 import { Loader2, AlertCircle, Users, Clock, CheckCircle2 } from 'lucide-react'
-import StatusBadge from '../shared/StatusBadge'
 
 /**
  * PipelineDag — renders a DAG of pipeline stages with animated connectors.
@@ -27,12 +26,12 @@ function PipelineDag({ stages = [], onStageClick, compact = false, layout = 'hor
   }
 
   return (
-    <div className="w-full border border-bg-border rounded-lg bg-bg-card/50 overflow-x-auto relative z-0" style={{ padding: '25.6px' }}>
-      <div className="flex items-start w-full min-w-max" style={{ paddingLeft: '12.8px', paddingRight: '12.8px' }}>
+    <div className="w-full border border-bg-border rounded-lg bg-bg-card/50 overflow-x-auto relative z-0 px-4 py-5">
+      <div className="flex items-start w-max min-w-full gap-3">
         {stages.map((stage, index) => (
           <React.Fragment key={stage.id}>
             {/* Stage Column - Bubble + Name */}
-            <div className="flex flex-col items-center" style={{ flex: '0 0 auto', zIndex: 0, gap: '6.4px' }}>
+            <div className="flex flex-col items-center" style={{ flex: '0 0 auto', zIndex: 0, gap: '8px' }}>
               {/* Bubble */}
               <HorizontalBubbleNode
                 stage={stage}
@@ -42,8 +41,8 @@ function PipelineDag({ stages = [], onStageClick, compact = false, layout = 'hor
               />
               
               {/* Stage Name - Centered under bubble */}
-              <div style={{ width: compact ? '64px' : '80px' }} className="text-center">
-                <p style={{ fontSize: '9.6px' }} className="font-medium text-text-secondary line-clamp-2">
+              <div style={{ width: compact ? '84px' : '112px' }} className="text-center">
+                <p style={{ fontSize: compact ? '10px' : '11px' }} className="font-medium text-text-secondary leading-snug break-words">
                   {stage.name.replace(/Stage \d+ — /, '')}
                 </p>
               </div>
@@ -51,7 +50,7 @@ function PipelineDag({ stages = [], onStageClick, compact = false, layout = 'hor
 
             {/* Connector between stages - Flex to fill space between bubbles */}
             {index < stages.length - 1 && (
-              <div style={{ flex: '1 1 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '32px', minWidth: '16px' }}>
+              <div style={{ flex: '1 1 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '32px', minWidth: compact ? '18px' : '28px' }}>
                 <HorizontalConnector
                   upstream={stage}
                   downstream={stages[index + 1]}
@@ -71,12 +70,12 @@ function PipelineDag({ stages = [], onStageClick, compact = false, layout = 'hor
  */
 function VerticalPipelineDag({ stages = [], onStageClick, compact = false }) {
   return (
-    <div className="w-full border border-bg-border rounded-lg bg-bg-card/50 overflow-x-auto relative z-0" style={{ padding: '19.2px' }}>
-      <div className="flex flex-col items-center w-full">
+    <div className="w-full border border-bg-border rounded-lg bg-bg-card/50 relative z-0 p-4">
+      <div className="flex flex-col items-start w-full">
         {stages.map((stage, index) => (
           <React.Fragment key={stage.id}>
             {/* Stage Row - Bubble + Name */}
-            <div className="flex items-center w-full" style={{ gap: '12.8px', paddingTop: '9.6px', paddingBottom: '9.6px' }}>
+            <div className="flex items-start w-full" style={{ gap: '12.8px', paddingTop: '9.6px', paddingBottom: '9.6px' }}>
               {/* Bubble */}
               <div className="flex-shrink-0">
                 <HorizontalBubbleNode
@@ -89,7 +88,7 @@ function VerticalPipelineDag({ stages = [], onStageClick, compact = false }) {
               
               {/* Stage Name - Left aligned */}
               <div className="flex-1">
-                <p style={{ fontSize: '9.6px' }} className="font-medium text-text-secondary">
+                <p style={{ fontSize: '11px' }} className="font-medium text-text-secondary leading-snug break-words">
                   {stage.name.replace(/Stage \d+ — /, '')}
                 </p>
                 {stage.status && (

@@ -3,7 +3,7 @@
 AUTO-GENERATED GOLD DIMENSION SCRIPT
 
 KPI context: Average Premium per Policy Amount
-Source table: silver.silver_policy_cover_level_transactions
+Source table: silver.silver_policy_transactions
 Expected runtime: Spark / Databricks with Delta support
 
 DO NOT EDIT MANUALLY
@@ -20,8 +20,8 @@ try:
 except Exception:
     print("Could not create schema 'gold' in the current catalog")
 
-SOURCE_TABLE = 'silver.silver_policy_cover_level_transactions'
-DIMENSIONS = [{'entity': 'coverage', 'source_table': 'silver.silver_policy_cover_level_transactions', 'logical_table': 'policy_cover_level_transactions', 'columns': ['COVER_NAME', 'COVER_GROUP_IDENTIFIER_NAME', 'COVERAGE_CATEGORY']}, {'entity': 'region', 'source_table': 'silver.silver_policy_cover_level_transactions', 'logical_table': 'policy_cover_level_transactions', 'columns': ['GEOG_STATE_NAME', 'GEOG_ZONE']}]
+SOURCE_TABLE = 'silver.silver_policy_transactions'
+DIMENSIONS = [{'entity': 'policy', 'source_table': 'silver.silver_policy_transactions', 'logical_table': 'policy_transactions', 'columns': ['POLICY_TRANSACTION_TYPE', 'SEGMENT_NAME']}, {'entity': 'product', 'source_table': 'silver.silver_policy_transactions', 'logical_table': 'policy_transactions', 'columns': ['PRODUCT_NAME', 'PRODUCT_GROUP_NAME']}]
 
 if not SOURCE_TABLE or not spark.catalog.tableExists(SOURCE_TABLE):
     raise ValueError(f"Missing dimension source table: {SOURCE_TABLE}")

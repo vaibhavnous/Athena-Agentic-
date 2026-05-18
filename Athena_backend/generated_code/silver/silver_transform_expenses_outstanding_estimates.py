@@ -24,16 +24,16 @@ try:
 except Exception:
     print("Could not create schema 'silver' in the current catalog")
 
-RUN_ID = "9504e06c-3bfb-4b63-8a2f-5f25223b2149"
+RUN_ID = "8c8b190c-56e9-41f6-8329-de7690bc58a8"
 SOURCE_TABLE = "bronze.bronze_expenses_outstanding_estimates"
 TARGET_TABLE = "silver.silver_expenses_outstanding_estimates"
 TEMP_VIEW = "silver_src_expenses_outstanding_estimates"
 
-EXPECTED_COLUMNS = ['claimid', 'updatenum', 'grossestimate', 'inserteddate']
+EXPECTED_COLUMNS = []
 STRING_COLUMNS = []
 PII_COLUMNS = []
 KEY_COLUMNS = []
-CAST_RULES = {'claimid': 'bigint', 'updatenum': 'int', 'grossestimate': 'decimal(38,10)', 'inserteddate': 'date'}
+CAST_RULES = {}
 COLUMN_ALIASES = {}
 
 if not spark.catalog.tableExists(SOURCE_TABLE):

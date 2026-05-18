@@ -544,12 +544,20 @@ def _summary_next_gate(
     enriched_payload: Dict[str, Any],
     gate3_approved: bool,
 ) -> Optional[int]:
+    downstream_progress_exists = bool(
+        nominated_tables
+        or certified_tables
+        or enriched_payload
+        or gate3_approved
+        or checkpoint.get("human_table_decision") == "COMPLETED"
+        or checkpoint.get("enrichment_review_status") in {"COMPLETED", "PENDING"}
+    )
     if nominated_tables and not certified_tables:
         return 2
     if enriched_payload and not gate3_approved:
         return 3
     checkpoint_status = str(checkpoint.get("status") or "").upper()
-    if checkpoint_status == "HITL_WAIT":
+    if checkpoint_status == "HITL_WAIT" and not downstream_progress_exists:
         return 1
     return None
 

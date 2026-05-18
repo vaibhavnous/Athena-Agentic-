@@ -3,7 +3,7 @@
 AUTO-GENERATED GOLD KPI SCRIPT
 
 KPI: Total Risk Sum Insured Amount
-Source table: silver.silver_policy_transactions
+Source table: silver.silver_claim_payment_expenses
 Target table: gold.fact_total_risk_sum_insured_amount
 Expected runtime: Spark / Databricks with Delta support
 
@@ -20,21 +20,21 @@ try:
 except Exception:
     print("Could not create schema 'gold' in the current catalog")
 
-RUN_ID = '9504e06c-3bfb-4b63-8a2f-5f25223b2149'
+RUN_ID = '8c8b190c-56e9-41f6-8329-de7690bc58a8'
 KPI_NAME = 'Total Risk Sum Insured Amount'
-SOURCE_TABLE = 'silver.silver_policy_transactions'
+SOURCE_TABLE = 'silver.silver_claim_payment_expenses'
 TARGET_TABLE = 'gold.fact_total_risk_sum_insured_amount'
 VALUE_COLUMN = 'total_risk_sum_insured_amount_value'
 SILVER_SCHEMA = 'silver'
-SOURCE_LOGICAL_TABLE = 'policy_transactions'
-MEASURE_COLUMN = 'BRANCH_OFFICE_NAME'
+SOURCE_LOGICAL_TABLE = 'claim_payment_expenses'
+MEASURE_COLUMN = 'PaymentID'
 MEASURE_AGGREGATION = 'SUM'
-DIMENSION_COLUMNS = ['BEGIN_DATE', 'END_DATE', 'POLICY_ISSUED_DATE', 'POLICY_TRANSACTION_TYPE', 'PRODUCT_NAME', 'PRODUCT_GROUP_NAME', 'SEGMENT_NAME', 'BUSINESS_DIVISION_NAME', 'AGENT_NAME', 'AGEN_T_CATEGORY_NAME', 'AGENT_SUB_CATEGORY_NAME', 'CHANNEL_NAME']
-DIMENSION_SPECS = [{'entity': 'policy', 'source_table': 'silver.silver_policy_transactions', 'logical_table': 'policy_transactions', 'columns': ['POLICY_TRANSACTION_TYPE', 'SEGMENT_NAME', 'BUSINESS_DIVISION_NAME', 'AGEN_T_CATEGORY_NAME', 'CHANNEL_NAME']}, {'entity': 'product', 'source_table': 'silver.silver_policy_transactions', 'logical_table': 'policy_transactions', 'columns': ['PRODUCT_NAME', 'PRODUCT_GROUP_NAME']}, {'entity': 'agent', 'source_table': 'silver.silver_policy_transactions', 'logical_table': 'policy_transactions', 'columns': ['AGENT_NAME', 'AGENT_SUB_CATEGORY_NAME']}]
-TIME_COLUMN = 'BEGIN_DATE'
+DIMENSION_COLUMNS = ['UpdateNum', 'PaidDate', 'ServiceTax', 'PayeeID', 'PayeeName', 'PayeeType', 'ServiceProviderID', 'ServiceProviderName', 'ServiceProviderTypeName', 'PaymentModeID', 'PaymentModeName', 'SurveyType']
+DIMENSION_SPECS = [{'entity': 'claim', 'source_table': 'silver.silver_claim_payment_expenses', 'logical_table': 'claim_payment_expenses', 'columns': ['UpdateNum', 'ServiceTax', 'PayeeID', 'PayeeName', 'PayeeType', 'ServiceProviderID', 'ServiceProviderName', 'ServiceProviderTypeName', 'PaymentModeID', 'PaymentModeName', 'SurveyType']}]
+TIME_COLUMN = 'PaidDate'
 TIME_GRAIN = 'month'
-BUSINESS_FILTERS = ['Consistent identifiers across systems', 'No transformations at bronze layer']
-JOIN_PATHS = [{'left_table': 'policy_transactions', 'left_column': 'RERERENCE_ID', 'right_table': 'policy_cover_level_transactions', 'right_column': 'RERERENCE_ID', 'join_type': 'INNER', 'cardinality': 'MANY_TO_ONE', 'confidence': 0.8, 'certified': False}, {'left_table': 'policy_cover_level_transactions', 'left_column': 'RERERENCE_ID', 'right_table': 'policy_transactions', 'right_column': 'RERERENCE_ID', 'join_type': 'INNER', 'cardinality': 'MANY_TO_ONE', 'confidence': 0.8, 'certified': False}]
+BUSINESS_FILTERS = ['Consistent identifiers across systems.', 'No transformations at bronze layer.', 'Data quality handled downstream.']
+JOIN_PATHS = []
 
 if not spark.catalog.tableExists(SOURCE_TABLE):
     raise ValueError(f"Missing silver source table: {SOURCE_TABLE}")
@@ -139,14 +139,14 @@ group_columns.extend([
 ])
 
 if TIME_COLUMN and TIME_COLUMN in available_columns:
-    group_columns.append(date_trunc('month', col('BEGIN_DATE')).alias('period_start'))
+    group_columns.append(date_trunc('month', col('PaidDate')).alias('period_start'))
 elif TIME_COLUMN:
     print(f"WARNING: Gold time column '{TIME_COLUMN}' is missing from {SOURCE_TABLE}")
 
 if MEASURE_AGGREGATION != "COUNT" and MEASURE_COLUMN not in available_columns:
     raise ValueError(f"Gold measure column '{MEASURE_COLUMN}' is missing from {SOURCE_TABLE}")
 
-agg_expr = sum(col('BRANCH_OFFICE_NAME')).alias('total_risk_sum_insured_amount_value')
+agg_expr = sum(col('PaymentID')).alias('total_risk_sum_insured_amount_value')
 
 if group_columns:
     result = df.groupBy(*group_columns).agg(agg_expr)

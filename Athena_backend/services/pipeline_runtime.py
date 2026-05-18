@@ -25,6 +25,13 @@ def _pipeline_schema() -> str:
     )
 
 
+def _checkpoint_enriched_payload(checkpoint: Dict[str, Any]) -> Dict[str, Any]:
+    payload = checkpoint.get("enriched_metadata") or checkpoint.get("enrichment_review_artifact") or {}
+    if isinstance(payload, dict) and isinstance(payload.get("enrichment_artifact"), dict):
+        return payload.get("enrichment_artifact") or {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def fetch_json_artifact(run_id: str, artifact_type: str) -> Dict[str, Any]:
     conn = get_connection()
     try:
@@ -531,8 +538,20 @@ def get_run_context(run_id: str) -> Dict[str, Any]:
         or checkpoint.get("certified_tables")
         or []
     )
-    enriched_payload = fetch_json_artifact(run_id, "ENRICHED_METADATA")
+    enriched_payload = fetch_json_artifact(run_id, "ENRICHED_METADATA") or _checkpoint_enriched_payload(checkpoint)
     gate3_payload = fetch_json_artifact(run_id, "GATE3_APPROVED_ENRICHMENT")
+    if not gate3_payload and checkpoint.get("enrichment_review_status") == "COMPLETED":
+        gate3_payload = checkpoint.get("enrichment_review_artifact") or {"approved_from_checkpoint": True}
+    downstream_progress_exists = bool(
+        nominated_tables
+        or certified_tables
+        or enriched_payload
+        or gate3_payload
+        or checkpoint.get("human_table_decision") == "COMPLETED"
+        or checkpoint.get("enrichment_review_status") in {"COMPLETED", "PENDING"}
+    )
+    if downstream_progress_exists:
+        pending_gate1 = []
     bronze_generation_completed = any(
         row.get("artifact_type") in {"BRONZE_GENERATION", "BRONZE_SCRIPTS"}
         or str(row.get("stage", "")).lower().startswith("bronze")
@@ -797,7 +816,8 @@ def submit_gate3_review(run_id: str, approve: bool) -> Dict[str, Any]:
     from nodes.hitl import build_hitl_enrichment_review_node
     from nodes.silver_gen import silver_code_generation_node
 
-    metadata = fetch_json_artifact(run_id, "ENRICHED_METADATA")
+    checkpoint_state = load_checkpoint_state(run_id) or {}
+    metadata = fetch_json_artifact(run_id, "ENRICHED_METADATA") or _checkpoint_enriched_payload(checkpoint_state)
     if not metadata:
         raise ValueError("No enriched metadata found for this run.")
 
@@ -815,7 +835,6 @@ def submit_gate3_review(run_id: str, approve: bool) -> Dict[str, Any]:
     if result.get("enrichment_review_status") != "COMPLETED":
         return result
 
-    checkpoint_state = load_checkpoint_state(run_id) or {}
     certified_tables = (
         fetch_json_artifact(run_id, "GATE2_CERTIFIED_TABLES").get("certified_tables", [])
         or metadata.get("certified_tables")

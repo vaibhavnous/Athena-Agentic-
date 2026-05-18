@@ -24,16 +24,16 @@ try:
 except Exception:
     print("Could not create schema 'silver' in the current catalog")
 
-RUN_ID = "9504e06c-3bfb-4b63-8a2f-5f25223b2149"
+RUN_ID = "8c8b190c-56e9-41f6-8329-de7690bc58a8"
 SOURCE_TABLE = "bronze.bronze_claim_information"
 TARGET_TABLE = "silver.silver_claim_information"
 TEMP_VIEW = "silver_src_claim_information"
 
-EXPECTED_COLUMNS = []
-STRING_COLUMNS = []
-PII_COLUMNS = []
+EXPECTED_COLUMNS = ['claimid', 'lossdate', 'inserteddate', 'claimtranstype', 'updatenum', 'policytransid', 'claimclosedate', 'claimsettlementmodename', 'claimlosscoveragename', 'courtid', 'courtname', 'caseid', 'claimcausetypename', 'claimnaturesoflossid', 'claimnaturesoflossname']
+STRING_COLUMNS = ['claimtranstype', 'policytransid', 'claimsettlementmodename', 'claimlosscoveragename', 'courtname', 'caseid', 'claimcausetypename', 'claimnaturesoflossname']
+PII_COLUMNS = ['claimnaturesoflossname']
 KEY_COLUMNS = []
-CAST_RULES = {}
+CAST_RULES = {'claimid': 'bigint', 'lossdate': 'timestamp', 'inserteddate': 'timestamp', 'updatenum': 'int', 'claimclosedate': 'date', 'courtid': 'bigint', 'claimnaturesoflossid': 'bigint'}
 COLUMN_ALIASES = {}
 
 if not spark.catalog.tableExists(SOURCE_TABLE):

@@ -28,6 +28,7 @@ function AppShell() {
 
   const lastOnlineRef = useRef<boolean | null>(null)
   const runsRequestInFlightRef = useRef(false)
+  const gateNotificationSnapshotRef = useRef<Record<string, number | null>>({})
 
   useEffect(() => {
     if (lastOnlineRef.current === serverOnline) return
@@ -63,6 +64,27 @@ function AppShell() {
       try {
         const backendRuns = await getRuns()
         if (cancelled || !Array.isArray(backendRuns) || backendRuns.length === 0) return
+
+        const previousGateMap = gateNotificationSnapshotRef.current
+        const hasSnapshot = Object.keys(previousGateMap).length > 0
+        if (hasSnapshot) {
+          for (const run of backendRuns) {
+            const nextGate = Number(run?.next_gate || 0) || null
+            const previousGate = previousGateMap[run.id] ?? null
+            if ((nextGate === 2 || nextGate === 3) && previousGate !== nextGate) {
+              addNotification({
+                type: 'info',
+                title: `Gate ${nextGate} Ready`,
+                message: run.brd_filename || run.id,
+                duration: 3500
+              })
+            }
+          }
+        }
+        gateNotificationSnapshotRef.current = Object.fromEntries(
+          backendRuns.map((run) => [run.id, Number(run?.next_gate || 0) || null])
+        )
+
         setRuns(backendRuns)
         if (!activeRunId || !backendRuns.some((run) => run.id === activeRunId)) {
           const resumable = backendRuns.find((run) => run.next_gate === 2 || run.next_gate === 3)
@@ -83,7 +105,7 @@ function AppShell() {
       cancelled = true
       if (timer !== null) window.clearTimeout(timer)
     }
-  }, [activeRunId, serverOnline, setRuns, setActiveRun])
+  }, [activeRunId, addNotification, serverOnline, setRuns, setActiveRun])
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-bg-base">

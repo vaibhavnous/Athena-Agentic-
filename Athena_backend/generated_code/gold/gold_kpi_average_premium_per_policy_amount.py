@@ -3,7 +3,7 @@
 AUTO-GENERATED GOLD KPI SCRIPT
 
 KPI: Average Premium per Policy Amount
-Source table: silver.silver_policy_cover_level_transactions
+Source table: silver.silver_policy_transactions
 Target table: gold.fact_average_premium_per_policy_amount
 Expected runtime: Spark / Databricks with Delta support
 
@@ -20,21 +20,21 @@ try:
 except Exception:
     print("Could not create schema 'gold' in the current catalog")
 
-RUN_ID = '9504e06c-3bfb-4b63-8a2f-5f25223b2149'
+RUN_ID = '8c8b190c-56e9-41f6-8329-de7690bc58a8'
 KPI_NAME = 'Average Premium per Policy Amount'
-SOURCE_TABLE = 'silver.silver_policy_cover_level_transactions'
+SOURCE_TABLE = 'silver.silver_policy_transactions'
 TARGET_TABLE = 'gold.fact_average_premium_per_policy_amount'
 VALUE_COLUMN = 'average_premium_per_policy_amount_value'
 SILVER_SCHEMA = 'silver'
-SOURCE_LOGICAL_TABLE = 'policy_cover_level_transactions'
-MEASURE_COLUMN = 'PREMIUM'
+SOURCE_LOGICAL_TABLE = 'policy_transactions'
+MEASURE_COLUMN = 'BRANCH_OFFICE_NAME'
 MEASURE_AGGREGATION = 'AVG'
-DIMENSION_COLUMNS = ['BEGIN_DATE', 'END_DATE', 'POLICY_ISSUED_DATE', 'PaidDate', 'InsertedDate', 'COVER_NAME', 'GEOG_STATE_NAME', 'COVER_GROUP_IDENTIFIER_NAME', 'GEOG_ZONE', 'COVERAGE_CATEGORY']
-DIMENSION_SPECS = [{'entity': 'coverage', 'source_table': 'silver.silver_policy_cover_level_transactions', 'logical_table': 'policy_cover_level_transactions', 'columns': ['COVER_NAME', 'COVER_GROUP_IDENTIFIER_NAME', 'COVERAGE_CATEGORY']}, {'entity': 'region', 'source_table': 'silver.silver_policy_cover_level_transactions', 'logical_table': 'policy_cover_level_transactions', 'columns': ['GEOG_STATE_NAME', 'GEOG_ZONE']}]
+DIMENSION_COLUMNS = ['PaidDate', 'LossDate', 'InsertedDate', 'ClaimCloseDate', 'BEGIN_DATE', 'END_DATE', 'POLICY_ISSUED_DATE', 'POLICY_TRANSACTION_TYPE', 'PRODUCT_NAME', 'PRODUCT_GROUP_NAME', 'SEGMENT_NAME']
+DIMENSION_SPECS = [{'entity': 'policy', 'source_table': 'silver.silver_policy_transactions', 'logical_table': 'policy_transactions', 'columns': ['POLICY_TRANSACTION_TYPE', 'SEGMENT_NAME']}, {'entity': 'product', 'source_table': 'silver.silver_policy_transactions', 'logical_table': 'policy_transactions', 'columns': ['PRODUCT_NAME', 'PRODUCT_GROUP_NAME']}]
 TIME_COLUMN = 'BEGIN_DATE'
 TIME_GRAIN = 'month'
-BUSINESS_FILTERS = ['Consistent identifiers across systems', 'No transformations at bronze layer']
-JOIN_PATHS = [{'left_table': 'policy_transactions', 'left_column': 'RERERENCE_ID', 'right_table': 'policy_cover_level_transactions', 'right_column': 'RERERENCE_ID', 'join_type': 'INNER', 'cardinality': 'MANY_TO_ONE', 'confidence': 0.8, 'certified': False}, {'left_table': 'policy_cover_level_transactions', 'left_column': 'RERERENCE_ID', 'right_table': 'policy_transactions', 'right_column': 'RERERENCE_ID', 'join_type': 'INNER', 'cardinality': 'MANY_TO_ONE', 'confidence': 0.8, 'certified': False}]
+BUSINESS_FILTERS = ['Consistent identifiers across systems.', 'No transformations at bronze layer.', 'Data quality handled downstream.']
+JOIN_PATHS = []
 
 if not spark.catalog.tableExists(SOURCE_TABLE):
     raise ValueError(f"Missing silver source table: {SOURCE_TABLE}")
@@ -146,7 +146,7 @@ elif TIME_COLUMN:
 if MEASURE_AGGREGATION != "COUNT" and MEASURE_COLUMN not in available_columns:
     raise ValueError(f"Gold measure column '{MEASURE_COLUMN}' is missing from {SOURCE_TABLE}")
 
-agg_expr = avg(col('PREMIUM')).alias('average_premium_per_policy_amount_value')
+agg_expr = avg(col('BRANCH_OFFICE_NAME')).alias('average_premium_per_policy_amount_value')
 
 if group_columns:
     result = df.groupBy(*group_columns).agg(agg_expr)

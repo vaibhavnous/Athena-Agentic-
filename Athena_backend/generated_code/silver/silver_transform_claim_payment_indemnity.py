@@ -24,16 +24,16 @@ try:
 except Exception:
     print("Could not create schema 'silver' in the current catalog")
 
-RUN_ID = "9504e06c-3bfb-4b63-8a2f-5f25223b2149"
+RUN_ID = "8c8b190c-56e9-41f6-8329-de7690bc58a8"
 SOURCE_TABLE = "bronze.bronze_claim_payment_indemnity"
 TARGET_TABLE = "silver.silver_claim_payment_indemnity"
 TEMP_VIEW = "silver_src_claim_payment_indemnity"
 
-EXPECTED_COLUMNS = []
-STRING_COLUMNS = []
+EXPECTED_COLUMNS = ['paymentid', 'updatenum', 'paiddate', 'paidamount', 'servicetax', 'claimid', 'payeeid', 'payeename', 'payeetype', 'serviceproviderid', 'serviceprovidername', 'serviceprovidertypename', 'paymentmodeid', 'paymentmodename', 'surveytype', 'garageid', 'garagename', 'gcgaragecity', 'garagetypeid', 'garagetypename', 'hospitalid', 'hospitalname', 'hospitaltype']
+STRING_COLUMNS = ['payeename', 'payeetype', 'serviceprovidername', 'serviceprovidertypename', 'paymentmodeid', 'paymentmodename', 'surveytype', 'garagename', 'gcgaragecity', 'garagetypename', 'hospitalname', 'hospitaltype']
 PII_COLUMNS = []
 KEY_COLUMNS = []
-CAST_RULES = {}
+CAST_RULES = {'paymentid': 'bigint', 'updatenum': 'int', 'paiddate': 'date', 'paidamount': 'decimal(38,10)', 'servicetax': 'decimal(38,10)', 'claimid': 'bigint', 'payeeid': 'bigint', 'serviceproviderid': 'bigint', 'garageid': 'bigint', 'garagetypeid': 'bigint', 'hospitalid': 'bigint'}
 COLUMN_ALIASES = {}
 
 if not spark.catalog.tableExists(SOURCE_TABLE):

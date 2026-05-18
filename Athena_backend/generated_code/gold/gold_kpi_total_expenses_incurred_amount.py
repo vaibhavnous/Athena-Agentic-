@@ -20,7 +20,7 @@ try:
 except Exception:
     print("Could not create schema 'gold' in the current catalog")
 
-RUN_ID = '9504e06c-3bfb-4b63-8a2f-5f25223b2149'
+RUN_ID = '8c8b190c-56e9-41f6-8329-de7690bc58a8'
 KPI_NAME = 'Total Expenses Incurred Amount'
 SOURCE_TABLE = 'silver.silver_claim_payment_expenses'
 TARGET_TABLE = 'gold.fact_total_expenses_incurred_amount'
@@ -29,11 +29,11 @@ SILVER_SCHEMA = 'silver'
 SOURCE_LOGICAL_TABLE = 'claim_payment_expenses'
 MEASURE_COLUMN = 'PaymentID'
 MEASURE_AGGREGATION = 'SUM'
-DIMENSION_COLUMNS = ['BEGIN_DATE', 'END_DATE', 'POLICY_ISSUED_DATE', 'UpdateNum', 'PaidDate', 'ServiceTax', 'PayeeID', 'PayeeName', 'PayeeType', 'ServiceProviderID', 'ServiceProviderName', 'ServiceProviderTypeName']
-DIMENSION_SPECS = [{'entity': 'claim', 'source_table': 'silver.silver_claim_payment_expenses', 'logical_table': 'claim_payment_expenses', 'columns': ['UpdateNum', 'ServiceTax', 'PayeeID', 'PayeeName', 'PayeeType', 'ServiceProviderID', 'ServiceProviderName', 'ServiceProviderTypeName']}]
+DIMENSION_COLUMNS = ['UpdateNum', 'PaidDate', 'ServiceTax', 'PayeeID', 'PayeeName', 'PayeeType', 'ServiceProviderID', 'ServiceProviderName', 'ServiceProviderTypeName', 'PaymentModeID', 'PaymentModeName', 'SurveyType']
+DIMENSION_SPECS = [{'entity': 'claim', 'source_table': 'silver.silver_claim_payment_expenses', 'logical_table': 'claim_payment_expenses', 'columns': ['UpdateNum', 'ServiceTax', 'PayeeID', 'PayeeName', 'PayeeType', 'ServiceProviderID', 'ServiceProviderName', 'ServiceProviderTypeName', 'PaymentModeID', 'PaymentModeName', 'SurveyType']}]
 TIME_COLUMN = 'PaidDate'
 TIME_GRAIN = 'month'
-BUSINESS_FILTERS = ['Consistent identifiers across systems', 'No transformations at bronze layer']
+BUSINESS_FILTERS = ['Consistent identifiers across systems.', 'No transformations at bronze layer.', 'Data quality handled downstream.']
 JOIN_PATHS = []
 
 if not spark.catalog.tableExists(SOURCE_TABLE):

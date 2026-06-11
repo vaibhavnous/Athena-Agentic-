@@ -8,7 +8,7 @@ import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import useAthenaStore from '../../store/useAthenaStore'
 import usePipelineSocket from '../../hooks/usePipelineSocket'
-import { getRuns } from '../../api/athenaApi'
+import { getRun, getRuns } from '../../api/athenaApi'
 import { getGateDisplayName, getPhaseGroups } from '../../utils/pipelinePhases'
 
 const PAUSED_BANNER_DISMISSALS_KEY = 'athena.pausedBannerDismissals'
@@ -57,6 +57,7 @@ function AppShell() {
   const lastOnlineRef = useRef<boolean | null>(null)
   const runsRequestInFlightRef = useRef(false)
   const [dismissedPausedBanners, setDismissedPausedBanners] = useState(() => loadPausedBannerDismissals())
+  const [pausedRunDetail, setPausedRunDetail] = useState(null)
 
   useEffect(() => {
     if (lastOnlineRef.current === serverOnline) return
@@ -124,20 +125,67 @@ function AppShell() {
 
   const pausedBannerKey = pausedRun ? `${pausedRun.id}:${Number(pausedRun.next_gate || 0)}` : null
 
+  useEffect(() => {
+    if (!pausedRun?.id || !pausedBannerKey) {
+      setPausedRunDetail(null)
+      return
+    }
+
+    let cancelled = false
+    setPausedRunDetail(null)
+
+    const hydratePausedRun = async () => {
+      try {
+        const detail = await getRun(pausedRun.id)
+        if (cancelled) return
+
+        const detailGate = Number(detail?.next_gate || 0)
+        const expectedGate = Number(pausedRun?.next_gate || 0)
+        const expectedGateKey =
+          detailGate === 1 ? 'gate1' :
+          detailGate === 2 ? 'gate2' :
+          detailGate === 3 ? 'gate3' :
+          detailGate === 4 ? 'gate4' :
+          detailGate === 5 ? 'gate5' :
+          null
+
+        const gateStepReady = expectedGateKey
+          ? (detail?.pipeline_steps || []).some(
+              (step) => step?.key === expectedGateKey && String(step?.state || '').toUpperCase() === 'HITL_WAIT'
+            )
+          : false
+
+        if (detailGate === expectedGate && gateStepReady) {
+          setPausedRunDetail(detail)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('[AppShell] Failed to hydrate paused run detail', error)
+        }
+      }
+    }
+
+    hydratePausedRun()
+    return () => {
+      cancelled = true
+    }
+  }, [pausedBannerKey, pausedRun])
+
   const pausedRunSummary = useMemo(() => {
-    if (!pausedRun) return null
-    const gate = Number(pausedRun.next_gate || 0)
-    const phases = getPhaseGroups(pausedRun)
+    const bannerRun = pausedRunDetail || pausedRun
+    if (!bannerRun) return null
+    const gate = Number(bannerRun.next_gate || 0)
+    const phases = getPhaseGroups(bannerRun)
     const total = phases.reduce((sum, phase) => sum + (phase.total || 0), 0)
     const completed = phases.reduce((sum, phase) => sum + (phase.completed || 0), 0)
     return {
       gate,
-      gateLabel: getGateDisplayName(gate, pausedRun.source),
+      gateLabel: getGateDisplayName(gate, bannerRun.source),
       progressLabel: total > 0 ? `${completed}/${total} stages done` : 'Pipeline paused',
-      timeAgo: formatTimeAgo(pausedRun.updated_at || pausedRun.started_at || pausedRun.created_at),
-      resumeMessage: pausedRun.resume_message || 'Pipeline progress is saved. Resume review when you are ready.',
+      timeAgo: formatTimeAgo(bannerRun.updated_at || bannerRun.started_at || bannerRun.created_at),
+      resumeMessage: bannerRun.resume_message || 'Pipeline progress is saved. Resume review when you are ready.',
     }
-  }, [pausedRun])
+  }, [pausedRun, pausedRunDetail])
 
   useEffect(() => {
     const pausedKeys = (runs || [])
@@ -153,7 +201,12 @@ function AppShell() {
     })
   }, [runs])
 
-  const isPausedBannerVisible = Boolean(pausedRun && pausedBannerKey && !dismissedPausedBanners[pausedBannerKey])
+  const isPausedBannerVisible = Boolean(
+    pausedRun &&
+    pausedRunDetail &&
+    pausedBannerKey &&
+    !dismissedPausedBanners[pausedBannerKey]
+  )
 
   const dismissPausedBanner = () => {
     if (!pausedBannerKey) return

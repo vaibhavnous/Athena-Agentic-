@@ -160,6 +160,7 @@ export function usePipelineLogs(
     discoveryError,
     logs,
     isLoadingLogs,
+    isRefreshingLogs,
     logsError,
     lastLogTimestamp,
     terminalLogs,

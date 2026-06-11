@@ -147,8 +147,6 @@ function HorizontalBubbleNode({ stage, index, onClick, compact = false }) {
     iconColor = 'text-text-primary'
   }
 
-  const bubbleSize = compact ? 'w-8 h-8' : 'w-9.6 h-9.6'
-
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.8 }}

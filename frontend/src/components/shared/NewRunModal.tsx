@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowLeft,
@@ -30,6 +30,27 @@ const DEFAULT_FORM = {
   databaseType: 'azure_sql',
   databaseName: 'insurance',
   stageConfirmationEnabled: true,
+}
+
+function buildInitialForm(settings, seedRun) {
+  return {
+    ...DEFAULT_FORM,
+    provider: settings.provider || DEFAULT_FORM.provider,
+    deployment: settings.azure_deployment || DEFAULT_FORM.deployment,
+    databaseName: DEFAULT_FORM.databaseName,
+    ...(seedRun
+      ? {
+          projectName: seedRun.brd_filename || '',
+          source: seedRun.source || DEFAULT_FORM.source,
+          sftpEntity: seedRun.sftp_entity || DEFAULT_FORM.sftpEntity,
+          fileName: seedRun.brd_filename || '',
+          provider: seedRun.provider || settings.provider || DEFAULT_FORM.provider,
+          deployment: seedRun.deployment || settings.azure_deployment || DEFAULT_FORM.deployment,
+          databaseType: seedRun.database_type || DEFAULT_FORM.databaseType,
+          databaseName: seedRun.database_name || DEFAULT_FORM.databaseName,
+        }
+      : {}),
+  }
 }
 
 const SOURCE_OPTIONS = [
@@ -97,34 +118,32 @@ function buildFileRunLabel(source, entity) {
   return buildSftpRunLabel(entity)
 }
 
-function NewRunModal({ isOpen, onClose }) {
+function NewRunModal({ isOpen, onClose, initialSeedRun = null }) {
   const fileInputRef = useRef(null)
   const addRun = useAthenaStore((s) => s.addRun)
   const addNotification = useAthenaStore((s) => s.addNotification)
   const settings = useAthenaStore((s) => s.settings)
 
-  const [form, setForm] = useState(() => ({
-    ...DEFAULT_FORM,
-    provider: settings.provider || DEFAULT_FORM.provider,
-    deployment: settings.azure_deployment || DEFAULT_FORM.deployment,
-    databaseName: DEFAULT_FORM.databaseName,
-  }))
+  const [form, setForm] = useState(() => buildInitialForm(settings, initialSeedRun))
   const [uploadedFile, setUploadedFile] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [isDragging, setIsDragging] = useState(false)
 
   const resetState = () => {
-    setForm({
-      ...DEFAULT_FORM,
-      provider: settings.provider || DEFAULT_FORM.provider,
-      deployment: settings.azure_deployment || DEFAULT_FORM.deployment,
-      databaseName: DEFAULT_FORM.databaseName,
-    })
+    setForm(buildInitialForm(settings, initialSeedRun))
     setUploadedFile(null)
     setError(null)
     setIsDragging(false)
   }
+
+  useEffect(() => {
+    if (!isOpen) return
+    setForm(buildInitialForm(settings, initialSeedRun))
+    setUploadedFile(null)
+    setError(null)
+    setIsDragging(false)
+  }, [initialSeedRun, isOpen, settings])
 
   const handleClose = () => {
     if (loading) return

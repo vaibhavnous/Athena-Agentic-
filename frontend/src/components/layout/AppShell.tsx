@@ -1,13 +1,37 @@
 // @ts-nocheck
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { AlertTriangle, Clock3, PlayCircle, RotateCcw, X } from 'lucide-react'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import useAthenaStore from '../../store/useAthenaStore'
 import usePipelineSocket from '../../hooks/usePipelineSocket'
 import { getRuns } from '../../api/athenaApi'
+import { getGateDisplayName, getPhaseGroups } from '../../utils/pipelinePhases'
+
+const PAUSED_BANNER_DISMISSALS_KEY = 'athena.pausedBannerDismissals'
+
+function loadPausedBannerDismissals() {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.localStorage.getItem(PAUSED_BANNER_DISMISSALS_KEY)
+    const parsed = raw ? JSON.parse(raw) : {}
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function persistPausedBannerDismissals(value) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(PAUSED_BANNER_DISMISSALS_KEY, JSON.stringify(value))
+  } catch {
+    // ignore localStorage errors
+  }
+}
 
 /**
  * Root application shell — Topbar + Sidebar + main content area.
@@ -32,7 +56,7 @@ function AppShell() {
 
   const lastOnlineRef = useRef<boolean | null>(null)
   const runsRequestInFlightRef = useRef(false)
-  const lastAutoOpenedGateRef = useRef<string | null>(null)
+  const [dismissedPausedBanners, setDismissedPausedBanners] = useState(() => loadPausedBannerDismissals())
 
   useEffect(() => {
     if (lastOnlineRef.current === serverOnline) return
@@ -93,21 +117,72 @@ function AppShell() {
     }
   }, [activeRunId, addNotification, setRuns, setActiveRun, setServerOnline])
 
+  const pausedRuns = useMemo(
+    () => (runs || []).filter((run) => [1, 2, 3, 4, 5].includes(Number(run?.next_gate || 0))),
+    [runs]
+  )
+
+  const pausedRun = useMemo(
+    () => pausedRuns.find((run) => run.id === activeRunId) || pausedRuns[0] || null,
+    [activeRunId, pausedRuns]
+  )
+
+  const pausedBannerKey = pausedRun ? `${pausedRun.id}:${Number(pausedRun.next_gate || 0)}` : null
+
+  const pausedRunSummary = useMemo(() => {
+    if (!pausedRun) return null
+    const gate = Number(pausedRun.next_gate || 0)
+    const phases = getPhaseGroups(pausedRun)
+    const total = phases.reduce((sum, phase) => sum + (phase.total || 0), 0)
+    const completed = phases.reduce((sum, phase) => sum + (phase.completed || 0), 0)
+    return {
+      gate,
+      gateLabel: getGateDisplayName(gate, pausedRun.source),
+      progressLabel: total > 0 ? `${completed}/${total} stages done` : 'Pipeline paused',
+      timeAgo: formatTimeAgo(pausedRun.updated_at || pausedRun.started_at || pausedRun.created_at),
+      resumeMessage: pausedRun.resume_message || 'Pipeline progress is saved. Resume review when you are ready.',
+    }
+  }, [pausedRun])
+
   useEffect(() => {
-    const readyRuns = (runs || []).filter((run) => [1, 2, 3, 4, 5].includes(Number(run?.next_gate || 0)))
-    if (!readyRuns.length) return
+    if (!pausedRun || !pausedBannerKey) return
+    if (activeRunId !== pausedRun.id) {
+      setActiveRun(pausedRun.id)
+    }
+  }, [activeRunId, pausedBannerKey, pausedRun, setActiveRun])
 
-    const preferredRun = readyRuns.find((run) => run.id === activeRunId) || readyRuns[0]
-    const gate = Number(preferredRun?.next_gate || 0)
-    if (!gate) return
+  useEffect(() => {
+    if (!pausedRuns.length) return
+    setDismissedPausedBanners((current) => {
+      const activeKeys = new Set(pausedRuns.map((run) => `${run.id}:${Number(run.next_gate || 0)}`))
+      const next = Object.fromEntries(Object.entries(current).filter(([key]) => activeKeys.has(key)))
+      const changed = Object.keys(next).length !== Object.keys(current).length
+      if (changed) persistPausedBannerDismissals(next)
+      return changed ? next : current
+    })
+  }, [pausedRuns])
 
-    const gateKey = `${preferredRun.id}:${gate}`
-    if (lastAutoOpenedGateRef.current === gateKey) return
+  const isPausedBannerVisible = Boolean(pausedRun && pausedBannerKey && !dismissedPausedBanners[pausedBannerKey])
 
-    lastAutoOpenedGateRef.current = gateKey
-    setActiveRun(preferredRun.id)
+  const dismissPausedBanner = () => {
+    if (!pausedBannerKey) return
+    setDismissedPausedBanners((current) => {
+      const next = { ...current, [pausedBannerKey]: true }
+      persistPausedBannerDismissals(next)
+      return next
+    })
+  }
+
+  const handleResumePausedRun = () => {
+    if (!pausedRun) return
+    setActiveRun(pausedRun.id)
     navigate('/app/hitl')
-  }, [activeRunId, navigate, runs, setActiveRun])
+  }
+
+  const handleRestartPausedRun = () => {
+    if (!pausedRun) return
+    window.dispatchEvent(new CustomEvent('athena:new-run', { detail: { seedRun: pausedRun } }))
+  }
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#080e1d] text-text-primary">
@@ -121,7 +196,60 @@ function AppShell() {
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
       >
         <Topbar />
-        <main className="flex-1 overflow-auto bg-[#080e1d] px-7 py-7">
+        <main className="flex-1 overflow-auto bg-[#080e1d] px-7 py-4">
+          {isPausedBannerVisible && pausedRun && pausedRunSummary && (
+            <div className="mb-5 rounded-xl border border-amber-500/40 bg-[#19171d] px-4 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.18)]">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-4">
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400">
+                    <AlertTriangle size={16} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-3 text-sm">
+                      <div className="truncate font-semibold text-white">
+                        {pausedRun.brd_filename || pausedRun.id}
+                      </div>
+                      <span className="rounded-lg border border-amber-500/35 bg-amber-500/12 px-2.5 py-1 text-[11px] font-semibold text-amber-300">
+                        {pausedRunSummary.gateLabel} Pending
+                      </span>
+                      <span className="text-[#d4d9e5]">{pausedRunSummary.progressLabel}</span>
+                      <span className="flex items-center gap-1 text-[#9da7bb]">
+                        <Clock3 size={13} />
+                        {pausedRunSummary.timeAgo}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs text-slate-400">
+                      {pausedRunSummary.resumeMessage} Progress is saved automatically.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={handleResumePausedRun}
+                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#2f5fb2] bg-[#102144] px-4 text-sm font-semibold text-[#9fc0ff] transition-colors hover:bg-[#14305f]"
+                  >
+                    <PlayCircle size={15} />
+                    Resume {pausedRunSummary.gateLabel}
+                  </button>
+                  <button
+                    onClick={handleRestartPausedRun}
+                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#32435f] bg-[#0f172a] px-4 text-sm font-semibold text-slate-100 transition-colors hover:border-[#4b6aa1] hover:bg-[#121c31]"
+                  >
+                    <RotateCcw size={15} />
+                    Restart
+                  </button>
+                  <button
+                    onClick={dismissPausedBanner}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+                    title="Dismiss paused pipeline banner"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           <Outlet />
         </main>
       </motion.div>
@@ -145,6 +273,19 @@ function AppShell() {
       </div>
     </div>
   )
+}
+
+function formatTimeAgo(value) {
+  if (!value) return 'just now'
+  const diff = Date.now() - new Date(value).getTime()
+  const seconds = Math.max(0, Math.floor(diff / 1000))
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+  if (days > 0) return `${days}d ago`
+  if (hours > 0) return `${hours}h ago`
+  if (minutes > 0) return `${minutes}m ago`
+  return 'just now'
 }
 
 /** Individual toast card */

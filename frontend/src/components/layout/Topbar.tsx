@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Plus, Sun, Moon } from 'lucide-react'
 import useThemeStore from '../../store/useThemeStore'
 import NewRunModal from '../shared/NewRunModal'
@@ -7,6 +7,27 @@ import NewRunModal from '../shared/NewRunModal'
 function Topbar() {
   const { theme, toggleTheme } = useThemeStore()
   const [showNewRunModal, setShowNewRunModal] = useState(false)
+  const [seedRun, setSeedRun] = useState(null)
+
+  useEffect(() => {
+    const handleOpenNewRun = (event) => {
+      setSeedRun(event?.detail?.seedRun || null)
+      setShowNewRunModal(true)
+    }
+
+    window.addEventListener('athena:new-run', handleOpenNewRun)
+    return () => window.removeEventListener('athena:new-run', handleOpenNewRun)
+  }, [])
+
+  const handleOpenFreshRun = () => {
+    setSeedRun(null)
+    setShowNewRunModal(true)
+  }
+
+  const handleCloseModal = () => {
+    setShowNewRunModal(false)
+    setSeedRun(null)
+  }
 
   return (
     <>
@@ -21,7 +42,7 @@ function Topbar() {
           </button>
 
           <button
-            onClick={() => setShowNewRunModal(true)}
+            onClick={handleOpenFreshRun}
             className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#3f82ff] px-5 text-[14px] font-semibold text-white transition-colors hover:bg-[#5a93f7]"
           >
             <Plus size={18} />
@@ -30,7 +51,7 @@ function Topbar() {
         </div>
       </header>
 
-      <NewRunModal isOpen={showNewRunModal} onClose={() => setShowNewRunModal(false)} />
+      <NewRunModal isOpen={showNewRunModal} onClose={handleCloseModal} initialSeedRun={seedRun} />
     </>
   )
 }

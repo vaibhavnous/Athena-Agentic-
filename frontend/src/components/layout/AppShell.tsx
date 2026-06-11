@@ -117,14 +117,9 @@ function AppShell() {
     }
   }, [activeRunId, addNotification, setRuns, setActiveRun, setServerOnline])
 
-  const pausedRuns = useMemo(
-    () => (runs || []).filter((run) => [1, 2, 3, 4, 5].includes(Number(run?.next_gate || 0))),
-    [runs]
-  )
-
   const pausedRun = useMemo(
-    () => pausedRuns.find((run) => run.id === activeRunId) || pausedRuns[0] || null,
-    [activeRunId, pausedRuns]
+    () => (runs || []).find((run) => run.id === activeRunId && [1, 2, 3, 4, 5].includes(Number(run?.next_gate || 0))) || null,
+    [activeRunId, runs]
   )
 
   const pausedBannerKey = pausedRun ? `${pausedRun.id}:${Number(pausedRun.next_gate || 0)}` : null
@@ -145,22 +140,18 @@ function AppShell() {
   }, [pausedRun])
 
   useEffect(() => {
-    if (!pausedRun || !pausedBannerKey) return
-    if (activeRunId !== pausedRun.id) {
-      setActiveRun(pausedRun.id)
-    }
-  }, [activeRunId, pausedBannerKey, pausedRun, setActiveRun])
-
-  useEffect(() => {
-    if (!pausedRuns.length) return
+    const pausedKeys = (runs || [])
+      .filter((run) => [1, 2, 3, 4, 5].includes(Number(run?.next_gate || 0)))
+      .map((run) => `${run.id}:${Number(run.next_gate || 0)}`)
+    if (!pausedKeys.length) return
     setDismissedPausedBanners((current) => {
-      const activeKeys = new Set(pausedRuns.map((run) => `${run.id}:${Number(run.next_gate || 0)}`))
+      const activeKeys = new Set(pausedKeys)
       const next = Object.fromEntries(Object.entries(current).filter(([key]) => activeKeys.has(key)))
       const changed = Object.keys(next).length !== Object.keys(current).length
       if (changed) persistPausedBannerDismissals(next)
       return changed ? next : current
     })
-  }, [pausedRuns])
+  }, [runs])
 
   const isPausedBannerVisible = Boolean(pausedRun && pausedBannerKey && !dismissedPausedBanners[pausedBannerKey])
 

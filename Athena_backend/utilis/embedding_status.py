@@ -6,6 +6,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from functools import lru_cache
 from typing import Any, Dict
 
+from utilis.azure_embeddings import azure_embeddings_configured, get_azure_embedding_model
 from utilis.env import load_backend_env
 
 
@@ -25,8 +26,10 @@ def get_embedding_runtime_status(probe_models: bool = True) -> Dict[str, Any]:
     status: Dict[str, Any] = {
         "env_enabled": env_enabled,
         "pinecone_configured": bool(os.getenv("PINECONE_API_KEY")),
+        "azure_embedding_configured": azure_embeddings_configured(),
         "sentence_transformer_available": False,
         "langchain_embedding_available": False,
+        "azure_embedding_available": False,
         "ready": False,
     }
 
@@ -35,40 +38,30 @@ def get_embedding_runtime_status(probe_models: bool = True) -> Dict[str, Any]:
         return status
 
     if not probe_models:
-        status["reason"] = "Lightweight health check; semantic model probing is deferred"
+        status["ready"] = status["pinecone_configured"] and status["azure_embedding_configured"]
+        status["reason"] = (
+            "Azure embedding configuration present; semantic model probing is deferred"
+            if status["ready"]
+            else "Azure embedding or Pinecone configuration is unavailable"
+        )
         return status
 
     try:
-        from sentence_transformers import SentenceTransformer
-
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            model = SentenceTransformer(ST_MODEL_NAME, local_files_only=True)
-            model.encode("athena embedding healthcheck")
-        status["sentence_transformer_available"] = True
-    except Exception as exc:
-        status["sentence_transformer_error"] = str(exc)
-
-    try:
-        from langchain_huggingface import HuggingFaceEmbeddings
-
-        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            model = HuggingFaceEmbeddings(
-                model_name=HF_MODEL_NAME,
-                model_kwargs={"local_files_only": True, "trust_remote_code": False},
-                encode_kwargs={"normalize_embeddings": False},
-            )
+            model = get_azure_embedding_model()
+            if model is None:
+                raise RuntimeError("Azure embedding configuration is unavailable")
             model.embed_query("athena embedding healthcheck")
-        status["langchain_embedding_available"] = True
+        status["azure_embedding_available"] = True
     except Exception as exc:
-        status["langchain_embedding_error"] = str(exc)
+        status["azure_embedding_error"] = str(exc)
 
     status["ready"] = (
         status["pinecone_configured"]
-        and status["sentence_transformer_available"]
-        and status["langchain_embedding_available"]
+        and status["azure_embedding_available"]
     )
     if not status["ready"] and "reason" not in status:
-        status["reason"] = "Local embedding model or Pinecone configuration is unavailable"
+        status["reason"] = "Azure embedding model or Pinecone configuration is unavailable"
 
     return status
 

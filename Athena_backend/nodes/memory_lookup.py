@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import json
-import io
 import os
 from typing import Any, Dict, List, Optional, Tuple
-from contextlib import redirect_stderr, redirect_stdout
 
 from pinecone import Pinecone
 
 from nodes.ingestion import _chunk_and_embed, finalize_ingestion_after_memory
 from state import Stage01State
+from utilis.azure_embeddings import get_azure_embedding_model
 from utilis.db import artifact_storage_fingerprint, config, get_pipeline_connection
 from utilis.env import load_backend_env
 from utilis.logger import logger
@@ -22,16 +21,13 @@ db_conf = config.get("azure_sql", {})
 db_schema = db_conf.get("schema_name", "dbo")
 pinecone_conf = config.get("pinecone", {})
 
-_EMB_MODEL: Optional[SentenceTransformer] = None
+_EMB_MODEL: Optional[Any] = None
 
 
-def _get_embedding_model(*, log_context: dict) -> Optional[SentenceTransformer]:
+def _get_embedding_model(*, log_context: dict) -> Optional[Any]:
     """
-    Lazily initialize the local embedding model.
-
-    Importing this module should not require network access (HF downloads).
-    If the model isn't available locally and can't be downloaded, we skip
-    semantic memory lookup gracefully.
+    Lazily initialize Azure embeddings and skip semantic memory gracefully
+    when credentials are not configured.
     """
     global _EMB_MODEL
     if _EMB_MODEL is not None:
@@ -41,13 +37,11 @@ def _get_embedding_model(*, log_context: dict) -> Optional[SentenceTransformer]:
             logger.info("Semantic memory lookup deferred; continuing with exact artifact history", extra=log_context)
             return None
 
-        from sentence_transformers import SentenceTransformer
-
-        if DEV_MODE:
-            _EMB_MODEL = SentenceTransformer("all-MiniLM-L6-v2", local_files_only=True)
-        else:
-            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                _EMB_MODEL = SentenceTransformer("all-MiniLM-L6-v2", local_files_only=True)
+        _EMB_MODEL = get_azure_embedding_model()
+        if _EMB_MODEL is None:
+            logger.info("Semantic memory lookup deferred; Azure embedding configuration unavailable", extra=log_context)
+            return None
+        _EMB_MODEL.embed_query("athena memory warmup")
         return _EMB_MODEL
     except Exception as exc:
         logger.info("Semantic memory lookup deferred; continuing with exact artifact history: %s", exc, extra=log_context)

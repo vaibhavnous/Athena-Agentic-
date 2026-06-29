@@ -4,12 +4,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import io
 import traceback
 import uuid
 from datetime import datetime, timezone
-from contextlib import redirect_stderr, redirect_stdout
-from typing import Optional
+from typing import Any, Optional
 
 import docx
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -22,6 +20,7 @@ from utilis.db import config, get_pipeline_connection
 from utilis.env import load_backend_env
 from utilis.logger import logger
 from utilis.db import execute_source_sql
+from utilis.azure_embeddings import get_azure_embedding_model
 
 load_backend_env()
 DEV_MODE = os.getenv("DEV_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
@@ -58,7 +57,7 @@ except Exception as e:
     _embedding_model = None
 
 
-def _get_embedding_model(*, log_context: dict) -> Optional[HuggingFaceEmbeddings]:
+def _get_embedding_model(*, log_context: dict) -> Optional[Any]:
     global _embedding_model
     if _embedding_model is not None:
         return _embedding_model
@@ -68,28 +67,12 @@ def _get_embedding_model(*, log_context: dict) -> Optional[HuggingFaceEmbeddings
             logger.info("Semantic indexing deferred; continuing with catalog-driven analysis", extra=log_context)
             return None
 
-        from langchain_huggingface import HuggingFaceEmbeddings
-
-        logger.info("Initializing local embedding model", extra={"node": "ingestion_bootstrap"})
-        os.environ["TRANSFORMERS_NO_ADVISE"] = "1"
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-        if DEV_MODE:
-            _embedding_model = HuggingFaceEmbeddings(
-                model_name="sentence-transformers/all-MiniLM-L6-v2",
-                model_kwargs={"local_files_only": True, "trust_remote_code": False},
-                encode_kwargs={"normalize_embeddings": False},
-            )
-            _embedding_model.embed_query("hello world")
-        else:
-            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                _embedding_model = HuggingFaceEmbeddings(
-                    model_name="sentence-transformers/all-MiniLM-L6-v2",
-                    model_kwargs={"local_files_only": True, "trust_remote_code": False},
-                    encode_kwargs={"normalize_embeddings": False},
-                )
-                _embedding_model.embed_query("hello world")
-
+        logger.info("Initializing Azure OpenAI embedding model", extra={"node": "ingestion_bootstrap"})
+        _embedding_model = get_azure_embedding_model()
+        if _embedding_model is None:
+            logger.info("Azure embedding configuration unavailable; continuing with catalog-driven analysis", extra=log_context)
+            return None
+        _embedding_model.embed_query("hello world")
         return _embedding_model
     except Exception as exc:
         logger.info("Semantic indexing deferred; continuing with catalog-driven analysis: %s", exc, extra=log_context)

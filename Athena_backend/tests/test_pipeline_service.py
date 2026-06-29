@@ -80,11 +80,13 @@ def test_run_pipeline_background_database_flow_saves_completed(monkeypatch):
 
 
 def test_run_pipeline_background_file_source_keeps_completed(monkeypatch):
+    from services import sftp_runtime
+
     saved = {}
 
     monkeypatch.setattr(pipeline_service, "load_checkpoint_state", lambda run_id: {})
     monkeypatch.setattr(
-        pipeline_service,
+        sftp_runtime,
         "start_sftp_pipeline",
         lambda **kwargs: {"result": {"status": "COMPLETED", "source": "sftp"}},
     )

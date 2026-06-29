@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from pinecone import Pinecone
 
+from utilis.azure_embeddings import get_azure_embedding_model
 from utilis.db import config, execute_source_sql
 from utilis.env import load_backend_env
 from utilis.logger import logger
@@ -23,7 +24,7 @@ DEFAULT_KB_INDEX_NAME = "knowledgebase"
 DEFAULT_KB_ID = "PC_Insurance_V1"
 DEFAULT_DOMAIN_PROFILE = "Insurance"
 
-_embedding_model: Optional[HuggingFaceEmbeddings] = None
+_embedding_model: Optional[Any] = None
 
 
 @dataclass(frozen=True)
@@ -62,7 +63,7 @@ def get_domain_kb_config() -> DomainKBConfig:
     )
 
 
-def _get_embedding_model() -> Optional[HuggingFaceEmbeddings]:
+def _get_embedding_model() -> Optional[Any]:
     global _embedding_model
     if _embedding_model is not None:
         return _embedding_model
@@ -71,15 +72,10 @@ def _get_embedding_model() -> Optional[HuggingFaceEmbeddings]:
         return None
 
     try:
-        from langchain_huggingface import HuggingFaceEmbeddings
-
-        os.environ["TRANSFORMERS_NO_ADVISE"] = "1"
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"
-        _embedding_model = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2",
-            model_kwargs={"local_files_only": True, "trust_remote_code": False},
-            encode_kwargs={"normalize_embeddings": False},
-        )
+        _embedding_model = get_azure_embedding_model()
+        if _embedding_model is None:
+            logger.info("Domain knowledge retrieval using configured catalog fallback")
+            return None
         _embedding_model.embed_query("domain knowledge base")
         return _embedding_model
     except Exception as exc:

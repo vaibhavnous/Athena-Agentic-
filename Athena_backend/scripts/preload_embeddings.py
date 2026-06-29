@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from utilis.azure_embeddings import get_azure_embedding_model
 from utilis.env import load_backend_env
 
 
@@ -31,27 +37,12 @@ def main() -> int:
         return 0
 
     try:
-        from sentence_transformers import SentenceTransformer
-        from langchain_huggingface import HuggingFaceEmbeddings
-    except Exception as exc:
-        return _fail(f"Embedding preload failed: dependency import error: {exc}")
-
-    hf_home = os.getenv("HF_HOME") or os.getenv("SENTENCE_TRANSFORMERS_HOME")
-    if hf_home:
-        print(f"Embedding cache directory: {hf_home}")
-
-    try:
-        print("Preloading SentenceTransformer model...")
-        st_model = SentenceTransformer("all-MiniLM-L6-v2", local_files_only=False)
-        st_model.encode("athena embedding warmup")
-
-        print("Preloading LangChain HuggingFace embeddings...")
-        lc_model = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2",
-            model_kwargs={"local_files_only": False, "trust_remote_code": False},
-            encode_kwargs={"normalize_embeddings": False},
-        )
-        lc_model.embed_query("athena embedding warmup")
+        print("Checking Azure OpenAI embedding deployment...")
+        model = get_azure_embedding_model()
+        if model is None:
+            return _fail("Embedding preload failed: Azure embedding configuration unavailable")
+        vector = model.embed_query("athena embedding warmup")
+        print(f"Azure embedding warmup completed; dimensions={len(vector)}")
     except Exception as exc:
         return _fail(f"Embedding preload failed: {exc}")
 

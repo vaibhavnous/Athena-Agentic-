@@ -70,6 +70,7 @@ export const getRuns = () => api.get('/runs', { timeout: RUNS_TIMEOUT })
 
 export const getRun = (runId: string) => api.get(`/runs/${runId}`, { timeout: RUNS_TIMEOUT })
 export const getRunScripts = (runId: string) => api.get(`/run-scripts/${runId}`, { timeout: REVIEW_TIMEOUT })
+export const getRunLineage = (runId: string) => api.get(`/run-lineage/${runId}`, { timeout: REVIEW_TIMEOUT })
 export const getTableReviews = (runId: string) => api.get(`/table-reviews/${runId}`, { timeout: REVIEW_TIMEOUT })
 export const submitTableReviews = (runId: string, approvedTables: string[]) =>
   api.post(`/table-reviews/${runId}`, { approved_tables: approvedTables }, { timeout: WRITE_TIMEOUT })

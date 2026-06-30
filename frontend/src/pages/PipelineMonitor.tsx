@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Circle, Clock3, Code2, Copy, Download, FileText, Play, RefreshCcw, RotateCcw, X } from 'lucide-react'
 import useAthenaStore from '../store/useAthenaStore'
 import PipelineLogsPanel from '../components/pipeline/PipelineLogsPanel'
-import { getPhaseGroups, getPipelineSteps, statusTone, summarizeRunSource } from '../utils/pipelinePhases'
+import { formatPipelineStepLabel, getPhaseGroups, getPipelineSteps, statusTone, summarizeRunSource } from '../utils/pipelinePhases'
 import { abortRun, continueStage, getRun, getRuns, getRunScripts, restartRun, resumeFromFailure, retryFailedStage } from '../api/athenaApi'
 
 const MIN_STAGE_VISIBLE_MS = 60000
@@ -670,6 +670,13 @@ function PipelineMonitor() {
     }
   }
 
+  const handleOpenLineage = (preferredLayer = '') => {
+    if (!activeRun?.id) return
+    const params = new URLSearchParams({ runId: String(activeRun.id) })
+    if (preferredLayer) params.set('layer', preferredLayer)
+    navigate(`/app/data-migration?${params.toString()}`)
+  }
+
   return (
     <div className="flex h-full min-h-[calc(100vh-116px)] flex-col">
       <div className="mb-7 flex flex-col gap-4">
@@ -839,13 +846,22 @@ function PipelineMonitor() {
                 <div className="text-sm font-semibold text-white">Generated Scripts</div>
                 <div className="mt-1 text-xs text-[#7d8daa]">Click Bronze, Silver, or Gold to preview generated artifacts.</div>
               </div>
-              <button
-                type="button"
-                onClick={() => handleOpenScriptsFullView()}
-                className="rounded-lg border border-[#34547f] px-3 py-2 text-xs font-semibold text-[#bcd4ff] transition-colors hover:bg-[#132849]"
-              >
-                Full View
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenLineage(selectedScriptLayer)}
+                  className="rounded-lg border border-[#2f6e62] px-3 py-2 text-xs font-semibold text-[#b7f5e7] transition-colors hover:bg-[#12352f]"
+                >
+                  View Lineage
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenScriptsFullView()}
+                  className="rounded-lg border border-[#34547f] px-3 py-2 text-xs font-semibold text-[#bcd4ff] transition-colors hover:bg-[#132849]"
+                >
+                  Full View
+                </button>
+              </div>
             </div>
 
             <div className="mb-3 grid grid-cols-3 gap-2">
@@ -1094,13 +1110,22 @@ function PipelineMonitor() {
                         Copy or download the generated script, then continue to {stageConfirmation.next_stage_label || 'the next stage'}.
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenScriptsFullView(stageScriptReview.layer)}
-                      className="rounded-lg border border-[#34547f] px-3 py-2 text-xs font-semibold text-[#bcd4ff] transition-colors hover:bg-[#132849]"
-                    >
-                      Open Full Script View
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenLineage(stageScriptReview.layer)}
+                        className="rounded-lg border border-[#2f6e62] px-3 py-2 text-xs font-semibold text-[#b7f5e7] transition-colors hover:bg-[#12352f]"
+                      >
+                        View Lineage
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenScriptsFullView(stageScriptReview.layer)}
+                        className="rounded-lg border border-[#34547f] px-3 py-2 text-xs font-semibold text-[#bcd4ff] transition-colors hover:bg-[#132849]"
+                      >
+                        Open Full Script View
+                      </button>
+                    </div>
                   </div>
 
                   <div className="space-y-3">
@@ -1194,8 +1219,7 @@ function buildFailureSummary(run) {
   const failedStageLabel =
     run?.failed_stage_label ||
     run?.failed_stage_key ||
-    failedStep?.label ||
-    failedStep?.name ||
+    formatPipelineStepLabel(failedStep?.label || failedStep?.name, failedStep?.key) ||
     failedStep?.key ||
     failedStep?.id ||
     'stage_unknown'

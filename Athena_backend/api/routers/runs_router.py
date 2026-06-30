@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from api.services.ui_service import ui_run, ui_run_summary
 from services.pipeline_runtime import (
     BACKGROUND_EXECUTOR,
+    build_run_lineage,
     list_runs,
     load_bronze_scripts,
     load_checkpoint_state,
@@ -183,3 +184,17 @@ def run_scripts(run_id: str) -> Dict[str, Any]:
             extra={"run_id": run_id},
         )
         raise HTTPException(status_code=503, detail="Failed to fetch run scripts")
+
+
+@router.get("/run-lineage/{run_id}")
+def run_lineage(run_id: str) -> Dict[str, Any]:
+    try:
+        checkpoint = load_checkpoint_state(run_id) or {"run_id": run_id}
+        return build_run_lineage(run_id, checkpoint)
+    except Exception:
+        logger.error(
+            "Failed to build run lineage",
+            exc_info=True,
+            extra={"run_id": run_id},
+        )
+        raise HTTPException(status_code=503, detail="Failed to fetch run lineage")

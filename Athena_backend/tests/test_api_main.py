@@ -1,5 +1,6 @@
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
@@ -15,8 +16,58 @@ def test_health_endpoint():
     body = response.json()
     assert body["status"] == "ok"
     assert body["service"] == "athena-fastapi"
-    assert isinstance(body["embeddings"]["ready"], bool)
-    assert "reason" in body["embeddings"]
+    assert "ready" in body["embeddings"]
+    assert "env_enabled" in body["embeddings"]
+    assert "pinecone_configured" in body["embeddings"]
+
+
+def test_schema_embedding_deletes_only_selected_database_vectors(monkeypatch):
+    from nodes import ingestion
+
+    calls = {"delete": [], "upsert": []}
+
+    class StubModel:
+        def embed_documents(self, texts):
+            return [[0.1, 0.2, 0.3] for _ in texts]
+
+    class StubIndex:
+        def delete(self, **kwargs):
+            calls["delete"].append(kwargs)
+
+        def upsert(self, **kwargs):
+            calls["upsert"].append(kwargs)
+
+    class StubPinecone:
+        def __init__(self, api_key=None):
+            self.api_key = api_key
+
+        def Index(self, name):
+            return StubIndex()
+
+    monkeypatch.setattr(ingestion, "_get_embedding_model", lambda log_context: StubModel())
+    monkeypatch.setattr(ingestion, "Pinecone", StubPinecone)
+    monkeypatch.setattr(ingestion, "execute_source_sql", lambda db, query, params: [
+        SimpleNamespace(TABLE_SCHEMA="dbo", TABLE_NAME="Claims", COLUMN_NAME="ClaimAmount")
+    ])
+    monkeypatch.setenv("PINECONE_API_KEY", "test-key")
+    monkeypatch.setenv("PINECONE_SCHEMA_INDEX_NAME", "metadata")
+
+    result = ingestion._embed_schema_metadata({
+        "run_id": "run-schema-smoke",
+        "status": "RUNNING",
+        "source_databases": ["Insurance"],
+    })
+
+    assert result["schema_embedded"] is True
+    assert result["schema_columns_count"] == 1
+    assert calls["delete"] == [
+        {
+            "filter": {"database_name": {"$eq": "insurance"}},
+            "namespace": "schema",
+        }
+    ]
+    assert all(call.get("delete_all") is not True for call in calls["delete"])
+    assert len(calls["upsert"]) == 1
 
 
 def test_pipeline_run_requires_brd_text_for_database_source():
@@ -193,6 +244,20 @@ def test_continue_stage_submits_background_job(monkeypatch):
     assert recorded["background_fn"] == "continue_database_pipeline_job"
     assert recorded["background_args"][0:3] == ("run-123", "enrichment", recorded["saved_state"])
     assert recorded["background_args"][3] is False
+
+
+def test_run_lineage_endpoint_returns_payload(monkeypatch):
+    monkeypatch.setattr("api.routers.runs_router.load_checkpoint_state", lambda run_id: {"run_id": run_id})
+    monkeypatch.setattr(
+        "api.routers.runs_router.build_run_lineage",
+        lambda run_id, checkpoint: {"run_id": run_id, "nodes": [{"id": "n1"}], "edges": [], "summary": {"fk_edge_count": 0}},
+    )
+
+    response = client.get("/run-lineage/run-123")
+
+    assert response.status_code == 200
+    assert response.json()["run_id"] == "run-123"
+    assert response.json()["nodes"][0]["id"] == "n1"
 
 
 def test_retry_failed_stage_rejects_non_failed_run(monkeypatch):

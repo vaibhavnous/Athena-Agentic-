@@ -18,7 +18,7 @@ import {
   submitSilverReview,
   submitTableReviews
 } from '../api/athenaApi'
-import { getGateDisplayName } from '../utils/pipelinePhases'
+import { formatPipelineStepLabel, getGateDisplayName } from '../utils/pipelinePhases'
 
 const TABS = ['Overview', 'Requirements', 'KPIs', 'Scripts', 'HITL Decisions', 'Cost Log']
 
@@ -208,7 +208,7 @@ function OverviewTab({ run, onRunRefresh, addNotification }) {
       duration = Math.max(0, Math.round((end - start) / 1000))
     }
     return {
-      name: s.name.replace(/Stage \d+ — /, ''),
+      name: formatPipelineStepLabel(s.name, s.key),
       duration,
       status: s.status
     }
@@ -827,6 +827,7 @@ function KpisTab({ run }) {
 }
 
 function ScriptsTab({ run, addNotification, onRunRefresh }) {
+  const navigate = useNavigate()
   const [layer, setLayer] = useState('gold')
   const [submitting, setSubmitting] = useState(null)
   const currentGate = Number(run?.next_gate || 0)
@@ -1039,6 +1040,10 @@ function ScriptsTab({ run, addNotification, onRunRefresh }) {
     }
   }
 
+  const handleOpenLineage = () => {
+    navigate(`/app/data-migration?runId=${encodeURIComponent(String(run.id || run.run_id || ''))}`)
+  }
+
   if (!scripts.length) {
     return <EmptyState message="No generated scripts are available for this run yet." />
   }
@@ -1054,6 +1059,12 @@ function ScriptsTab({ run, addNotification, onRunRefresh }) {
           </div>
           {reviewLayer ? (
             <div className="flex flex-wrap gap-2">
+              <button
+                onClick={handleOpenLineage}
+                className="btn-secondary text-sm"
+              >
+                View Lineage
+              </button>
               <button
                 onClick={() => handleReviewAction('APPROVED')}
                 disabled={!!submitting}
@@ -1087,7 +1098,15 @@ function ScriptsTab({ run, addNotification, onRunRefresh }) {
               )}
             </div>
           ) : (
-            <StatusBadge status={counts.gold > 0 ? 'COMPLETED' : 'GENERATED'} size="sm" />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleOpenLineage}
+                className="btn-secondary text-sm"
+              >
+                View Lineage
+              </button>
+              <StatusBadge status={counts.gold > 0 ? 'COMPLETED' : 'GENERATED'} size="sm" />
+            </div>
           )}
         </div>
       </div>
@@ -1251,7 +1270,7 @@ function CostLogTab({ run }) {
                 : '—'
               return (
                 <tr key={s.id} className="border-b border-bg-border hover:bg-white/2">
-                  <td className="px-4 py-3 text-gray-300 text-xs">{s.name}</td>
+                  <td className="px-4 py-3 text-gray-300 text-xs">{formatPipelineStepLabel(s.name, s.key)}</td>
                   <td className="px-4 py-3 font-mono text-xs text-gray-400">{s.tokens ? s.tokens.toLocaleString() : '—'}</td>
                   <td className="px-4 py-3 font-mono text-xs text-accent-green">{s.cost ? `$${s.cost.toFixed(4)}` : '—'}</td>
                   <td className="px-4 py-3 text-xs text-gray-400">{s.attempts || '—'}</td>
@@ -1272,7 +1291,7 @@ function CostLogTab({ run }) {
       {/* Prompt metadata per stage */}
       {stages.filter((s) => s.prompt_metadata).map((s) => (
         <div key={s.id} className="card p-4">
-          <h4 className="text-xs uppercase tracking-wider text-gray-500 mb-2">{s.name} — Prompt Config</h4>
+          <h4 className="text-xs uppercase tracking-wider text-gray-500 mb-2">{formatPipelineStepLabel(s.name, s.key)} — Prompt Config</h4>
           <JsonViewer data={s.prompt_metadata} maxHeight={160} />
         </div>
       ))}

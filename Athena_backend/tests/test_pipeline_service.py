@@ -80,13 +80,11 @@ def test_run_pipeline_background_database_flow_saves_completed(monkeypatch):
 
 
 def test_run_pipeline_background_file_source_keeps_completed(monkeypatch):
-    from services import sftp_runtime
-
     saved = {}
 
     monkeypatch.setattr(pipeline_service, "load_checkpoint_state", lambda run_id: {})
     monkeypatch.setattr(
-        sftp_runtime,
+        pipeline_service,
         "start_sftp_pipeline",
         lambda **kwargs: {"result": {"status": "COMPLETED", "source": "sftp"}},
     )
@@ -255,6 +253,81 @@ def test_run_context_preserves_stage_confirmation_status_after_bronze(monkeypatc
     assert context["stage_confirmation"]["last_completed_stage_key"] == "bronze"
     assert context["stage_confirmation"]["next_stage_key"] == "silver"
     assert context["bronze"]["scripts"][0]["script_body"] == "print('bronze')"
+
+
+def test_build_run_lineage_prefers_certified_fk_edges(monkeypatch):
+    from services import pipeline_runtime
+
+    checkpoint = {"run_id": "run-lineage", "gold_generation_contract": {}}
+    monkeypatch.setattr(
+        pipeline_runtime,
+        "load_bronze_scripts",
+        lambda run_id, checkpoint=None: {
+            "scripts": [
+                {"source": "insurance.dbo.claims", "target": "main.bronze.bronze_claims", "status": "APPROVED"},
+            ]
+        },
+    )
+    monkeypatch.setattr(
+        pipeline_runtime,
+        "load_silver_scripts",
+        lambda run_id, checkpoint=None: {
+            "scripts": [
+                {"source_table": "main.bronze.bronze_claims", "target_table": "silver.silver_claims", "status": "APPROVED"},
+            ]
+        },
+    )
+    monkeypatch.setattr(
+        pipeline_runtime,
+        "load_gold_scripts",
+        lambda run_id, checkpoint=None: {
+            "scripts": [
+                {
+                    "source_table": "silver.silver_claims",
+                    "target_table": "gold.fact_claim_count",
+                    "dimension_script_path": "C:\\tmp\\gold_dim_claim_count.py",
+                    "status": "APPROVED",
+                },
+            ]
+        },
+    )
+    monkeypatch.setattr(
+        pipeline_runtime,
+        "fetch_json_artifact",
+        lambda run_id, artifact: {
+            "certified_joins": [
+                {
+                    "left_table": "claims",
+                    "left_column": "policy_id",
+                    "right_table": "policies",
+                    "right_column": "policy_id",
+                    "constraint_name": "fk_claims_policies",
+                    "confidence": 1.0,
+                    "certified": True,
+                }
+            ],
+            "join_candidates": [
+                {
+                    "left_table": "claims",
+                    "left_column": "agent_id",
+                    "right_table": "agents",
+                    "right_column": "agent_id",
+                    "confidence": 0.55,
+                }
+            ],
+        }
+        if artifact == "ENRICHED_METADATA"
+        else {},
+    )
+
+    payload = pipeline_runtime.build_run_lineage("run-lineage", checkpoint)
+
+    edge_types = {edge["type"] for edge in payload["edges"]}
+    assert {"pipeline", "fk", "heuristic"}.issubset(edge_types)
+    fk_edges = [edge for edge in payload["edges"] if edge["type"] == "fk"]
+    assert fk_edges[0]["constraint_name"] == "fk_claims_policies"
+    assert payload["summary"]["fk_edge_count"] == 1
+    assert payload["summary"]["heuristic_edge_count"] == 1
 
 
 def test_run_context_converts_existing_pause_before_review_gate_to_hitl_wait(monkeypatch):

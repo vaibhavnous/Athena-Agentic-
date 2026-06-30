@@ -733,6 +733,210 @@ def load_gold_scripts(run_id: str, checkpoint: Optional[Dict[str, Any]] = None) 
     }
 
 
+def _lineage_node_id(layer: str, name: str) -> str:
+    safe_layer = re.sub(r"[^a-z0-9]+", "-", str(layer or "").lower()).strip("-") or "layer"
+    safe_name = re.sub(r"[^a-z0-9_.:]+", "-", str(name or "").lower()).strip("-") or "node"
+    return f"{safe_layer}:{safe_name}"
+
+
+def _append_lineage_edge(
+    edges: List[Dict[str, Any]],
+    seen_edges: set[tuple[str, str, str]],
+    *,
+    source: str,
+    target: str,
+    edge_type: str,
+    **metadata: Any,
+) -> None:
+    key = (source, target, edge_type)
+    if key in seen_edges:
+        return
+    seen_edges.add(key)
+    edges.append(
+        {
+            "id": f"{source}->{target}:{edge_type}",
+            "source": source,
+            "target": target,
+            "type": edge_type,
+            **metadata,
+        }
+    )
+
+
+def build_run_lineage(run_id: str, checkpoint: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    checkpoint = checkpoint or load_checkpoint_state(run_id) or {"run_id": run_id}
+    bronze = load_bronze_scripts(run_id, checkpoint)
+    silver = load_silver_scripts(run_id, checkpoint)
+    gold = load_gold_scripts(run_id, checkpoint)
+    enriched_payload = fetch_json_artifact(run_id, "ENRICHED_METADATA") or _checkpoint_enriched_payload(checkpoint)
+    gold_contract = fetch_json_artifact(run_id, "GOLD_GENERATION_CONTRACT") or checkpoint.get("gold_generation_contract") or {}
+
+    nodes: List[Dict[str, Any]] = []
+    edges: List[Dict[str, Any]] = []
+    seen_nodes: set[str] = set()
+    seen_edges: set[tuple[str, str, str]] = set()
+
+    def ensure_node(layer: str, name: str, label: str, **metadata: Any) -> str:
+        node_id = _lineage_node_id(layer, name)
+        if node_id not in seen_nodes:
+            seen_nodes.add(node_id)
+            nodes.append(
+                {
+                    "id": node_id,
+                    "layer": layer,
+                    "name": name,
+                    "label": label,
+                    **metadata,
+                }
+            )
+        return node_id
+
+    for item in (bronze.get("scripts") or []):
+        if not isinstance(item, dict):
+            continue
+        source_name = str(item.get("source") or item.get("source_table") or "")
+        target_name = str(item.get("target") or item.get("target_table") or "")
+        if not source_name or not target_name:
+            continue
+        source_id = ensure_node("source", source_name, source_name, kind="table")
+        bronze_id = ensure_node("bronze", target_name, target_name, kind="table")
+        _append_lineage_edge(
+            edges,
+            seen_edges,
+            source=source_id,
+            target=bronze_id,
+            edge_type="pipeline",
+            status=str(item.get("status") or "APPROVED"),
+            certified=True,
+        )
+
+    for item in (silver.get("scripts") or []):
+        if not isinstance(item, dict):
+            continue
+        source_name = str(item.get("source_table") or "")
+        target_name = str(item.get("target_table") or "")
+        if not source_name or not target_name:
+            continue
+        bronze_id = ensure_node("bronze", source_name, source_name, kind="table")
+        silver_id = ensure_node("silver", target_name, target_name, kind="table")
+        _append_lineage_edge(
+            edges,
+            seen_edges,
+            source=bronze_id,
+            target=silver_id,
+            edge_type="pipeline",
+            status=str(item.get("status") or "APPROVED"),
+            certified=True,
+        )
+
+    for item in (gold.get("scripts") or []):
+        if not isinstance(item, dict):
+            continue
+        source_name = str(item.get("source_table") or "")
+        target_name = str(item.get("target_table") or "")
+        if not source_name or not target_name:
+            continue
+        silver_id = ensure_node("silver", source_name, source_name, kind="table")
+        gold_id = ensure_node("gold", target_name, target_name, kind="fact")
+        _append_lineage_edge(
+            edges,
+            seen_edges,
+            source=silver_id,
+            target=gold_id,
+            edge_type="pipeline",
+            status=str(item.get("status") or "APPROVED"),
+            certified=True,
+        )
+        dimension_script_path = str(item.get("dimension_script_path") or "")
+        if dimension_script_path:
+            base_name = os.path.basename(dimension_script_path).replace(".py", "")
+            dim_id = ensure_node("gold", base_name, base_name, kind="dimension_script")
+            _append_lineage_edge(
+                edges,
+                seen_edges,
+                source=silver_id,
+                target=dim_id,
+                edge_type="dimension",
+                status=str(item.get("status") or "APPROVED"),
+                certified=True,
+            )
+
+    certified_joins = enriched_payload.get("certified_joins") if isinstance(enriched_payload, dict) else []
+    for join in certified_joins or []:
+        left_name = str(join.get("left_table") or "")
+        right_name = str(join.get("right_table") or "")
+        if not left_name or not right_name:
+            continue
+        left_id = ensure_node("logical", left_name, left_name, kind="logical_table")
+        right_id = ensure_node("logical", right_name, right_name, kind="logical_table")
+        _append_lineage_edge(
+            edges,
+            seen_edges,
+            source=left_id,
+            target=right_id,
+            edge_type="fk",
+            certified=True,
+            source_column=join.get("left_column"),
+            target_column=join.get("right_column"),
+            constraint_name=join.get("constraint_name"),
+            confidence=join.get("confidence"),
+        )
+
+    join_candidates = enriched_payload.get("join_candidates") if isinstance(enriched_payload, dict) else []
+    for join in join_candidates or []:
+        left_name = str(join.get("left_table") or "")
+        right_name = str(join.get("right_table") or "")
+        if not left_name or not right_name:
+            continue
+        left_id = ensure_node("logical", left_name, left_name, kind="logical_table")
+        right_id = ensure_node("logical", right_name, right_name, kind="logical_table")
+        _append_lineage_edge(
+            edges,
+            seen_edges,
+            source=left_id,
+            target=right_id,
+            edge_type="heuristic",
+            certified=False,
+            source_column=join.get("left_column"),
+            target_column=join.get("right_column"),
+            confidence=join.get("confidence"),
+        )
+
+    for mapping in (gold_contract.get("kpi_mappings") or []):
+        if not isinstance(mapping, dict):
+            continue
+        kpi_name = str(mapping.get("kpi_name") or "")
+        source_table = str(mapping.get("source_silver_table") or "")
+        if not kpi_name:
+            continue
+        kpi_id = ensure_node("kpi", kpi_name, kpi_name, kind="kpi", readiness=mapping.get("readiness"))
+        if source_table:
+            silver_id = ensure_node("silver", source_table, source_table, kind="table")
+            _append_lineage_edge(
+                edges,
+                seen_edges,
+                source=silver_id,
+                target=kpi_id,
+                edge_type="kpi",
+                certified=bool(mapping.get("join_paths")),
+                aggregation=(mapping.get("measure") or {}).get("aggregation"),
+            )
+
+    return {
+        "run_id": run_id,
+        "nodes": nodes,
+        "edges": edges,
+        "summary": {
+            "source_count": sum(1 for node in nodes if node.get("layer") == "source"),
+            "bronze_count": sum(1 for node in nodes if node.get("layer") == "bronze"),
+            "silver_count": sum(1 for node in nodes if node.get("layer") == "silver"),
+            "gold_count": sum(1 for node in nodes if node.get("layer") == "gold"),
+            "fk_edge_count": sum(1 for edge in edges if edge.get("type") == "fk"),
+            "heuristic_edge_count": sum(1 for edge in edges if edge.get("type") == "heuristic"),
+        },
+    }
+
+
 def build_pipeline_steps(
     *,
     source: str,
